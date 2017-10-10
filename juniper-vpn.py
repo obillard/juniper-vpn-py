@@ -25,7 +25,6 @@ import datetime
 
 debug = False
 
-ssl._create_default_https_context = ssl._create_unverified_context
 
 connection_process = None
 
@@ -92,6 +91,7 @@ class juniper_vpn(object):
 
             certs = []
             if args.certs:
+                print "certs: " + args.certs
                 now = datetime.datetime.now()
                 for f in args.certs.split(','):
                     cert = tncc.x509cert(f.strip())
@@ -101,7 +101,10 @@ class juniper_vpn(object):
                         print 'WARNING: %s is expired' % f
                     certs.append(cert)
                 args.certs = [n.strip() for n in args.certs.split(',')]
+            else:
+                print "no certs"
             args.certs = certs
+
 
         self.br = mechanize.Browser()
 
@@ -159,6 +162,22 @@ class juniper_vpn(object):
 
     def run(self):
         # Open landing page
+        print "Opening %s" % str('https://' + self.args.host)
+
+        """Fix"""
+        import ssl
+        try:
+            _create_unverified_https_context = ssl._create_unverified_context
+        except AttributeError:
+            # Legacy Python that doesn't verify HTTPS certificates by default
+            pass
+        else:
+            # Handle target environment that doesn't support HTTPS verification
+            ssl._create_default_https_context = _create_unverified_https_context
+        """End Fix """
+
+
+
         self.r = self.br.open('https://' + self.args.host)
         while True:
             action = self.next_action()
@@ -262,13 +281,18 @@ class juniper_vpn(object):
             arg = arg.replace('%DSID%', dsid).replace('%HOST%', self.args.host)
             action.append(arg)
 
+        print "action: %s" % (action)
         connection_process = subprocess.Popen(action, stdin=subprocess.PIPE)
         if args.stdin is not None:
             stdin = args.stdin.replace('%DSID%', dsid)
             stdin = stdin.replace('%HOST%', self.args.host)
+            print "comm"
             connection_process.communicate(input = stdin)
+            print "après comm"
         else:
+            print "wait"
             ret = connection_process.wait()
+            print "après"
         ret = connection_process.returncode
 
         # Openconnect specific
@@ -362,4 +386,3 @@ if __name__ == "__main__":
         jvpn.run()
     except KeyboardInterrupt:
         sys.exit(1)
-
